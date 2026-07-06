@@ -1,0 +1,46 @@
+app:
+  name: "Telegram AI Publisher"
+  env: "production"
+  debug: false
+
+db:
+  embedding_dimension: 1536
+
+redis:
+  url: "redis://localhost:6379/0"
+
+llm:
+  active_provider: "gemini"
+  temperature: 0.2
+  max_tokens: 1500
+  gemini:
+    model: "gemini-1.5-pro"
+  openai:
+    model: "gpt-4o"
+  claude:
+    model: "claude-3-5-sonnet"
+  ollama:
+    url: "http://localhost:11434"
+    model: "llama3"
+
+scraper:
+  check_interval: 300
+  telegram:
+    channels:
+      - "durov"
+      - "telegram"
+
+publisher:
+  telegram:
+    channel_id: "@my_channel"
+
+thresholds:
+  ad_score: 0.75
+  spam_score: 0.75
+  toxicity_score: 0.60
+  duplicate_cosine: 0.85
+  human_review_confidence: 0.90
+
+security:
+  jwt_algorithm: "HS256"
+  jwt_expire_minutes: 1440
