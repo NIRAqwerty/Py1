@@ -41,7 +41,8 @@ class OpenAIAdapter(BaseLLMAdapter):
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            max_retries = 3
+            import random
+            max_retries = 5
             for attempt in range(max_retries):
                 try:
                     resp = await client.post(
@@ -51,8 +52,8 @@ class OpenAIAdapter(BaseLLMAdapter):
                     )
                     
                     if resp.status_code == 429:
-                        wait_time = (attempt + 1) * 2.0
-                        logger.warning(f"Rate limited (429) on OpenRouter. Retrying in {wait_time}s...")
+                        wait_time = (attempt + 1) * 2.0 + random.uniform(0.5, 2.5)
+                        logger.warning(f"Rate limited (429) on OpenRouter. Retrying in {wait_time:.2f}s...")
                         await asyncio.sleep(wait_time)
                         continue
 
@@ -65,8 +66,8 @@ class OpenAIAdapter(BaseLLMAdapter):
                             json=payload,
                         )
                         if resp.status_code == 429:
-                            wait_time = (attempt + 1) * 2.0
-                            logger.warning(f"Rate limited (429) on OpenRouter fallback. Retrying in {wait_time}s...")
+                            wait_time = (attempt + 1) * 2.0 + random.uniform(0.5, 2.5)
+                            logger.warning(f"Rate limited (429) on OpenRouter fallback. Retrying in {wait_time:.2f}s...")
                             await asyncio.sleep(wait_time)
                             continue
 
