@@ -78,6 +78,8 @@ class OpenAIAdapter(BaseLLMAdapter):
                     if attempt == max_retries - 1:
                         logger.error("OpenAI text generation failed after retries", error=str(e))
                         raise
+            
+            raise RuntimeError("OpenAI text generation failed: all attempts were rate limited or failed.")
 
     async def get_embeddings(self, text: str) -> List[float]:
         url = f"{self.base_url}/embeddings"
@@ -131,7 +133,8 @@ class OpenAIAdapter(BaseLLMAdapter):
                 resp = await client.post(url, headers=headers, json=payload)
                 resp.raise_for_status()
                 data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
+                content = data["choices"][0]["message"].get("content")
+                return content.strip() if content else ""
             except Exception as e:
                 logger.error("OpenAI image analysis failed", error=str(e))
                 raise
