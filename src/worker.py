@@ -295,6 +295,7 @@ cron_minutes = {i for i in range(0, 60, cron_interval_minutes)}
 class WorkerSettings:
     functions = [fetch_sources_task, process_article_task, publish_post_task]
     redis_settings = redis_settings
+    max_jobs = 1
     cron_jobs = [
         cron(fetch_sources_task, second=0, minute=cron_minutes)
     ]
