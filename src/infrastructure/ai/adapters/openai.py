@@ -72,7 +72,8 @@ class OpenAIAdapter(BaseLLMAdapter):
 
                     resp.raise_for_status()
                     data = resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
+                    content = data["choices"][0]["message"].get("content")
+                    return content.strip() if content else ""
                 except Exception as e:
                     if attempt == max_retries - 1:
                         logger.error("OpenAI text generation failed after retries", error=str(e))
