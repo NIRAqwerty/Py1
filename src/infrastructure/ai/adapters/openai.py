@@ -41,7 +41,19 @@ class OpenAIAdapter(BaseLLMAdapter):
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
-                resp = await client.post(url, headers=headers, json=payload)
+                resp = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json=payload,
+                )
+                if resp.status_code == 402 and "openrouter.ai" in self.base_url:
+                    logger.warning("Credits depleted on OpenRouter. Attempting fallback to 'openrouter/free' model.")
+                    payload["model"] = "openrouter/free"
+                    resp = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        json=payload,
+                    )
                 resp.raise_for_status()
                 data = resp.json()
                 return data["choices"][0]["message"]["content"].strip()
