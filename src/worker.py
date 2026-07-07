@@ -290,10 +290,11 @@ async def publish_post_task(ctx: Any, article_id: str) -> None:
 
 # Configure Cron scheduling interval dynamically (convert scraper interval seconds to minutes)
 cron_interval_minutes = max(1, settings.scraper.check_interval // 60)
+cron_minutes = {i for i in range(0, 60, cron_interval_minutes)}
 
 class WorkerSettings:
     functions = [fetch_sources_task, process_article_task, publish_post_task]
     redis_settings = redis_settings
     cron_jobs = [
-        cron(fetch_sources_task, second=0, minute=f"*/{cron_interval_minutes}")
+        cron(fetch_sources_task, second=0, minute=cron_minutes)
     ]
