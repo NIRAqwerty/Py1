@@ -40,26 +40,42 @@ class OpenAIAdapter(BaseLLMAdapter):
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            try:
-                resp = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    json=payload,
-                )
-                if resp.status_code == 402 and "openrouter.ai" in self.base_url:
-                    logger.warning("Credits depleted on OpenRouter. Attempting fallback to 'openrouter/free' model.")
-                    payload["model"] = "openrouter/free"
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
                     resp = await client.post(
                         f"{self.base_url}/chat/completions",
                         headers={"Authorization": f"Bearer {self.api_key}"},
                         json=payload,
                     )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-            except Exception as e:
-                logger.error("OpenAI text generation failed", error=str(e))
-                raise
+                    
+                    if resp.status_code == 429:
+                        wait_time = (attempt + 1) * 2.0
+                        logger.warning(f"Rate limited (429) on OpenRouter. Retrying in {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                        continue
+
+                    if resp.status_code == 402 and "openrouter.ai" in self.base_url:
+                        logger.warning("Credits depleted on OpenRouter. Attempting fallback to 'openrouter/free' model.")
+                        payload["model"] = "openrouter/free"
+                        resp = await client.post(
+                            f"{self.base_url}/chat/completions",
+                            headers={"Authorization": f"Bearer {self.api_key}"},
+                            json=payload,
+                        )
+                        if resp.status_code == 429:
+                            wait_time = (attempt + 1) * 2.0
+                            logger.warning(f"Rate limited (429) on OpenRouter fallback. Retrying in {wait_time}s...")
+                            await asyncio.sleep(wait_time)
+                            continue
+
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        logger.error("OpenAI text generation failed after retries", error=str(e))
+                        raise
 
     async def get_embeddings(self, text: str) -> List[float]:
         url = f"{self.base_url}/embeddings"
