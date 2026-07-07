@@ -93,6 +93,17 @@ class Settings(BaseSettings):
                 yaml_data = yaml.safe_load(f) or {}
 
         # Merge yaml properties with settings constructor
-        return cls(**yaml_data)
+        instance = cls(**yaml_data)
+        
+        # Override with environment variables if set (e.g. in Docker)
+        db_url_env = os.getenv("DATABASE_URL")
+        if db_url_env:
+            instance.database_url = db_url_env
+            
+        redis_url_env = os.getenv("REDIS_URL")
+        if redis_url_env:
+            instance.redis.url = redis_url_env
+            
+        return instance
 
 settings = Settings.load()
