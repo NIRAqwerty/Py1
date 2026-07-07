@@ -30,10 +30,13 @@ class OpenAIAdapter(BaseLLMAdapter):
             messages.append({"role": "system", "content": system_instruction})
         messages.append({"role": "user", "content": prompt})
 
+        from src.config import settings
+
         payload = {
             "model": self.model_name,
             "messages": messages,
-            "temperature": temp
+            "temperature": temp,
+            "max_tokens": settings.llm.max_tokens
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:

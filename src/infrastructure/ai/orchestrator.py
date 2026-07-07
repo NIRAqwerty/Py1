@@ -26,6 +26,14 @@ class AIOrchestrator:
                     temperature=settings.llm.temperature,
                     base_url="https://zenmux.ai/api/v1",
                 )
+            elif settings.gemini_api_key.startswith("sk-or-v1-"):
+                logger.info("OpenRouter proxy key detected. Routing 'gemini' to OpenRouter OpenAI-compatible API.")
+                self.adapters["gemini"] = OpenAIAdapter(
+                    api_key=settings.gemini_api_key,
+                    model_name="google/gemini-2.5-pro",
+                    temperature=settings.llm.temperature,
+                    base_url="https://openrouter.ai/api/v1",
+                )
             else:
                 self.adapters["gemini"] = GeminiAdapter(
                     api_key=settings.gemini_api_key,
