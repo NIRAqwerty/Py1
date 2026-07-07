@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import yaml
 from datetime import datetime
 from typing import Set, Optional
 import uuid
@@ -23,6 +25,7 @@ from src.infrastructure.database.models import UserModel
 from src.infrastructure.database.repositories import (
     SqlAlchemyHumanReviewTaskRepository,
     SqlAlchemyArticleRepository,
+    SqlAlchemySourceRepository,
 )
 from src.infrastructure.security import verify_password
 from src.infrastructure.queue.arq_config import enqueue_job
@@ -330,6 +333,145 @@ async def process_new_draft_text(message: Message, state: FSMContext) -> None:
         
         await message.answer("✅ Черновик отредактирован и отправлен на публикацию!")
         await state.clear()
+
+@router.message(Command("setchannel"))
+async def cmd_setchannel(message: Message) -> None:
+    if not await check_auth(message):
+        return
+        
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        from src.config import Settings
+        current_settings = Settings.load()
+        current_channel = current_settings.publisher.telegram.channel_id
+        await message.answer(
+            f"📢 Текущий канал публикации: <code>{html.quote(current_channel or 'не установлен')}</code>\n\n"
+            "⚠️ Чтобы изменить, отправьте:\n"
+            "<code>/setchannel &lt;channel_id_or_handle&gt;</code>\n"
+            "Пример: <code>/setchannel @my_target_channel</code>",
+            parse_mode="HTML"
+        )
+        return
+        
+    new_channel = args[1].strip()
+    
+    try:
+        config_path = os.getenv("CONFIG_PATH", "config.yaml")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                yaml_data = yaml.safe_load(f) or {}
+            
+            if "publisher" not in yaml_data:
+                yaml_data["publisher"] = {}
+            if "telegram" not in yaml_data["publisher"]:
+                yaml_data["publisher"]["telegram"] = {}
+            yaml_data["publisher"]["telegram"]["channel_id"] = new_channel
+            
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(yaml_data, f, default_flow_style=False)
+                
+            await message.answer(f"✅ Канал публикации успешно изменен на <b>{html.quote(new_channel)}</b>!")
+            logger.info("Target publisher channel updated via Telegram command", new_channel=new_channel)
+        else:
+            await message.answer("❌ Ошибка: Файл конфигурации config.yaml не найден.")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при обновлении конфигурации: {str(e)}")
+
+@router.message(Command("addsource"))
+async def cmd_addsource(message: Message) -> None:
+    if not await check_auth(message):
+        return
+    
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer(
+            "⚠️ Использование: <code>/addsource &lt;channel_handle&gt;</code>\n"
+            "Пример: <code>/addsource @durov</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    channel_handle = args[1].strip()
+    if not channel_handle.startswith("@"):
+        channel_handle = "@" + channel_handle
+        
+    async with async_session_maker() as session:
+        source_repo = SqlAlchemySourceRepository(session)
+        
+        active_sources = await source_repo.find_all_active()
+        for src in active_sources:
+            if src.config.get("channel_handle") == channel_handle:
+                await message.answer(f"⚠️ Источник {channel_handle} уже добавлен и активен.")
+                return
+        
+        from src.domain.entities import Source
+        source = Source(
+            id=uuid.uuid4(),
+            name=channel_handle,
+            type="TELEGRAM",
+            config={"channel_handle": channel_handle},
+            status="ACTIVE",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        await source_repo.save(source)
+        await session.commit()
+        
+    await message.answer(f"✅ Источник {channel_handle} успешно добавлен в список для сбора контента!")
+
+@router.message(Command("sources"))
+async def cmd_sources(message: Message) -> None:
+    if not await check_auth(message):
+        return
+        
+    async with async_session_maker() as session:
+        source_repo = SqlAlchemySourceRepository(session)
+        sources = await source_repo.find_all_active()
+        
+        if not sources:
+            await message.answer("ℹ️ Список источников пуст.")
+            return
+            
+        response_text = "<b>📋 Активные источники контента:</b>\n\n"
+        keyboard_buttons = []
+        for s in sources:
+            handle = s.config.get("channel_handle", s.name)
+            response_text += f"🔹 {handle} (ID: <code>{s.id}</code>)\n"
+            keyboard_buttons.append([
+                InlineKeyboardButton(text=f"❌ Удалить {handle}", callback_data=f"source_remove:{s.id}")
+            ])
+            
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+        await message.answer(response_text, reply_markup=keyboard, parse_mode="HTML")
+
+@router.callback_query(lambda c: c.data and c.data.startswith("source_remove:"))
+async def process_source_remove(callback: CallbackQuery) -> None:
+    if not await check_auth_callback(callback):
+        return
+        
+    source_id_str = callback.data.split(":")[1]
+    source_id = uuid.UUID(source_id_str)
+    
+    async with async_session_maker() as session:
+        source_repo = SqlAlchemySourceRepository(session)
+        source = await source_repo.find_by_id(source_id)
+        
+        if not source or source.status != "ACTIVE":
+            await callback.answer("Источник не найден или уже неактивен", show_alert=True)
+            return
+            
+        source.status = "INACTIVE"
+        source.updated_at = datetime.utcnow()
+        
+        await source_repo.save(source)
+        await session.commit()
+        
+        handle = source.config.get("channel_handle", source.name)
+        await callback.message.edit_text(
+            f"✅ <b>Источник {handle} успешно удален из списка сбора контента.</b>",
+            parse_mode="HTML"
+        )
+        await callback.answer("Удалено")
 
 bot_task: Optional[asyncio.Task] = None
 bot_instance: Optional[Bot] = None

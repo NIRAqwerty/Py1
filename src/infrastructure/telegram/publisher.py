@@ -21,6 +21,10 @@ class TelegramPublisher:
             logger.warning("Telegram Bot Token is not configured. Mocking publication.")
             return "mock_message_id_12345"
 
+        from src.config import Settings
+        current_settings = Settings.load()
+        channel_id = current_settings.publisher.telegram.channel_id or self.channel_id
+
         if media_paths and os.path.exists(media_paths[0]):
             # Publish with image
             url = f"{self.base_url}/sendPhoto"
@@ -31,7 +35,7 @@ class TelegramPublisher:
                     with open(photo_path, "rb") as f:
                         files = {"photo": f}
                         data = {
-                            "chat_id": self.channel_id,
+                            "chat_id": channel_id,
                             "caption": text,
                             "parse_mode": "HTML"
                         }
@@ -48,7 +52,7 @@ class TelegramPublisher:
         # Publish text-only
         url = f"{self.base_url}/sendMessage"
         payload = {
-            "chat_id": self.channel_id,
+            "chat_id": channel_id,
             "text": text,
             "parse_mode": "HTML"
         }
