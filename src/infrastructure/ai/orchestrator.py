@@ -18,11 +18,20 @@ class AIOrchestrator:
     def _init_adapters(self) -> None:
         # Initialize Gemini adapter
         if settings.gemini_api_key and settings.gemini_api_key != "your_gemini_key_here":
-            self.adapters["gemini"] = GeminiAdapter(
-                api_key=settings.gemini_api_key,
-                model_name=settings.llm.gemini.model,
-                temperature=settings.llm.temperature,
-            )
+            if settings.gemini_api_key.startswith("sk-mg-"):
+                logger.info("ZenMux proxy key detected. Routing 'gemini' to ZenMux OpenAI-compatible API.")
+                self.adapters["gemini"] = OpenAIAdapter(
+                    api_key=settings.gemini_api_key,
+                    model_name="google/gemini-2.5-pro",
+                    temperature=settings.llm.temperature,
+                    base_url="https://zenmux.ai/api/v1",
+                )
+            else:
+                self.adapters["gemini"] = GeminiAdapter(
+                    api_key=settings.gemini_api_key,
+                    model_name=settings.llm.gemini.model,
+                    temperature=settings.llm.temperature,
+                )
         
         # Initialize OpenAI adapter
         if settings.openai_api_key and settings.openai_api_key != "your_openai_key_here":
