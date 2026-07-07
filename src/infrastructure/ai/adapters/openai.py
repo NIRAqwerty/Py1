@@ -1,5 +1,6 @@
 import base64
 import httpx
+import asyncio
 from typing import List, Optional
 from src.infrastructure.ai.adapters.base import BaseLLMAdapter
 from src.infrastructure.logging import get_logger
